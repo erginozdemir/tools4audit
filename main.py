@@ -9,15 +9,15 @@ app = FastAPI()
 # HTML şablonları için Jinja2 kullanımı
 templates = Jinja2Templates(directory="templates")
 
-pivot_table_global = None  # Pivot tabloyu geçici olarak saklamak için
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """ Kullanıcıya Tools4Audit giriş sayfasını gösterir. """
     return templates.TemplateResponse("home.html", {"request": request})
 
+aging_global = None  # Pivot tabloyu geçici olarak saklamak için
+
 @app.get("/aging_sample_download/")
-async def download_sample():
+async def aging_sample():
     """ Örnek Excel dosyasını kullanıcıya sunar. """
     
     # Örnek veri oluştur
@@ -46,15 +46,14 @@ async def download_sample():
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": "attachment; filename=ornek_yaslandirma.xlsx"})
 
-
 @app.post("/aging/")
-async def upload_file(request: Request, file: UploadFile = File(...)):
-    global pivot_table_global
+async def upload_aging_file(request: Request, file: UploadFile = File(...)):
+    global aging_global
 
     contents = await file.read()
-    excel_data = BytesIO(contents)
+    aging_data = BytesIO(contents)
 
-    df = pd.read_excel(excel_data)
+    df = pd.read_excel(aging_data)
 
     required_columns = ["Hesap Kodu", "Hesap Adı", "Fiş Tarihi", "Fiş No", "Fiş Türü", "Borç", "Alacak"]
     for col in required_columns:
@@ -102,7 +101,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     df_sorted["Dönem"] = df_sorted.apply(lambda row: 0 if row["Fiş Türü"] == "Açılış" else row["Fiş Tarihi"].month, axis=1)
 
     # Pivot tabloyu "Kalan" sütunu üzerinden oluştur
-    pivot_table = pd.pivot_table(df_sorted, 
+    aging_table = pd.pivot_table(df_sorted, 
                                  values="Kalan",
                                  index=["Hesap Kodu", "Hesap Adı"],
                                  columns="Dönem",
@@ -112,30 +111,30 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
                                  margins_name="Toplam")  # "All" yerine "Toplam" olarak adlandır
 
     # Sayı formatını uygula (nokta ile ayırma)
-    pivot_table = pivot_table.applymap(lambda x: "{:,.0f}".format(x).replace(",", "."))
+    aging_table = aging_table.applymap(lambda x: "{:,.0f}".format(x).replace(",", "."))
 
-    pivot_columns = ["Hesap Kodu", "Hesap Adı"] + [str(col) for col in pivot_table.columns.tolist()]
-    pivot_rows = pivot_table.reset_index().values.tolist()
+    aging_pivot_columns = ["Hesap Kodu", "Hesap Adı"] + [str(col) for col in aging_table.columns.tolist()]
+    aging_pivot_rows = aging_table.reset_index().values.tolist()
 
-    pivot_table_global = pivot_table  # Pivot tabloyu sakla
+    aging_global = aging_table  # Pivot tabloyu sakla
 
     return templates.TemplateResponse("aging.html", {
         "request": request, 
-        "pivot_columns": pivot_columns, 
-        "pivot_rows": pivot_rows
+        "aging_pivot_columns": aging_pivot_columns, 
+        "aging_pivot_rows": aging_pivot_rows
     })
 
 @app.get("/aging_excel_download/")
-async def download_excel():
-    global pivot_table_global
-    if pivot_table_global is None:
+async def aging_pivot():
+    global aging_global
+    if aging_global is None:
         return HTMLResponse(content="Henüz pivot tablo oluşturulmadı!", status_code=400)
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        pivot_table_global.to_excel(writer, sheet_name="PivotTable")
+        aging_global.to_excel(writer, sheet_name="PivotTable")
     
     output.seek(0)
 
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": "attachment; filename=pivot_table.xlsx"})
+                             headers={"Content-Disposition": "attachment; filename=yaslandirma_tablosu.xlsx"})
