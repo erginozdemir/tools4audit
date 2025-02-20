@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kasa Analizi Sonuçları</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center">Kasa Analizi Sonuçları</h2>
+        <p><strong>Kasa Sayısı:</strong> {{ unique_hesap_sayisi }}</p>
+
+        <h3>Kasa Bakiyeleri</h3>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Hesap Kodu</th>
+                    <th>Hesap Adı</th>
+                    <th>Bakiye</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in hesap_listesi %}
+                <tr>
+                    <td>{{ row["Hesap Kodu"] }}</td>
+                    <td>{{ row["Hesap Adı"] }}</td>
+                    <td>{{ row["Tutar"] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+<hr>
+        <h3>Tevsik Zorunluluğunu Aşan İşlemler</h3>
+        <p><strong>Belirlediğiniz Limit:</strong> {{ threshold }} TL</p>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Hesap Kodu</th>
+                    <th>Fiş Tarihi</th>
+                    <th>Fiş No</th>
+                    <th>Borç</th>
+                    <th>Alacak</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in high_values %}
+                <tr>
+                    <td>{{ row["Hesap Kodu"] }}</td>
+                    <td>{{ row["Fiş Tarihi"] }}</td>
+                    <td>{{ row["Fiş No"] }}</td>
+                    <td>{{ row["Borç"] }}</td>
+                    <td>{{ row["Alacak"] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+<hr>
+
+        <h3>Eksi Bakiye İle Devreden Günler</h3>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Hesap Kodu</th>
+                    <th>Fiş Tarihi</th>
+                    <th>Bakiye</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in negative_balances %}
+                <tr>
+                    <td>{{ row["Hesap Kodu"] }}</td>
+                    <td>{{ row["Fiş Tarihi"] }}</td>
+                    <td>{{ row["Kümülatif Bakiye"] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h3>Kur Farkı, Kambiyo, Değerleme İçeren Açıklamalar</h3>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Hesap Kodu</th>
+                    <th>Fiş Tarihi</th>
+                    <th>Açıklama</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in filtered_rows %}
+                <tr>
+                    <td>{{ row["Hesap Kodu"] }}</td>
+                    <td>{{ row["Fiş Tarihi"] }}</td>
+                    <td>{{ row["Açıklama"] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <a href="/" class="btn btn-primary">Ana Sayfaya Dön</a>
+    </div>
+</body>
+</html>

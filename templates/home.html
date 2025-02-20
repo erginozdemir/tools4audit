@@ -20,6 +20,17 @@
             </form>
         </div>
 <hr>
+        <!-- Yaşlandırma Bölümü -->
+        <div>
+            <h3>Kasa Analizi</h3>
+            <form action="/cash/" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" required class="form-control mb-3">
+                <label for="threshold">Tevsik Zorunluluğu Limitini Girin:</label>
+                <input type="number" name="threshold" id="threshold" class="form-control mb-3" value="5000" required>
+                <button type="submit" class="btn btn-primary">Analiz Et</button>
+                <a href="/cash_sample_download/" class="btn btn-secondary">Örnek Dosyayı İndir 📂</a>
+            </form>
+        </div>
        
     </div>
 </body>

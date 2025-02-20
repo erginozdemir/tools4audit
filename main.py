@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Request
+from fastapi import FastAPI, File, UploadFile, Request, Form
 import pandas as pd
 from fastapi.responses import HTMLResponse, StreamingResponse
 from io import BytesIO
@@ -53,7 +53,7 @@ async def upload_aging_file(request: Request, file: UploadFile = File(...)):
     contents = await file.read()
     aging_data = BytesIO(contents)
 
-    df = pd.read_excel(aging_data)
+    df = pd.read_excel(aging_data, dtype={"Hesap Kodu": str})
 
     required_columns = ["Hesap Kodu", "Hesap Adı", "Fiş Tarihi", "Fiş No", "Fiş Türü", "Borç", "Alacak"]
     for col in required_columns:
@@ -138,3 +138,63 @@ async def aging_pivot():
 
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              headers={"Content-Disposition": "attachment; filename=yaslandirma_tablosu.xlsx"})
+
+cash_global = None  # Pivot tabloyu geçici olarak saklamak için
+
+@app.post("/cash/")
+async def cash_analiz(request: Request, file: UploadFile = File(...), threshold: int = Form(5000)):
+    # Excel dosyasını oku
+    contents = await file.read()
+    cash_data = BytesIO(contents)
+    df = pd.read_excel(cash_data, dtype={"Hesap Kodu": str, "Fiş No": str})
+
+    required_columns = ["Hesap Kodu", "Hesap Adı", "Fiş Tarihi", "Fiş No", "Fiş Türü", "Borç", "Alacak"]
+    for col in required_columns:
+        if col not in df.columns:
+            return HTMLResponse(content=f"<h3>Hata: '{col}' sütunu eksik!</h3>", status_code=400)
+
+    df.fillna(0, inplace=True)
+
+    df["Fiş Tarihi"] = pd.to_datetime(df["Fiş Tarihi"], errors="coerce")
+
+    # Borç - Alacak hesaplayarak Bakiye sütunu ekleyelim
+    df["Tutar"] = df["Borç"] - df["Alacak"]
+
+    # Hesap Kodu ve Tarih sırasına göre sıralayalım
+    df = df.sort_values(by=["Hesap Kodu", "Fiş Tarihi"])
+
+    # 1) Hesap Kodu Sayısı ve Listesi
+    unique_hesap_kodlari = df["Hesap Kodu"].nunique()
+    hesap_listesi = df.groupby("Hesap Kodu").agg({"Hesap Adı": "first", "Tutar": "sum"}).reset_index()
+    hesap_listesi["Tutar"] =  hesap_listesi["Tutar"].apply(lambda x: "{:,.0f}".format(x).replace(",", "."))
+
+
+    # 2) 5.000 TL Üstü Borç/Alacak
+    high_values_df = df[(df["Borç"] > threshold) | (df["Alacak"] > threshold)]
+    high_values_df[["Borç", "Alacak"]] = high_values_df[["Borç", "Alacak"]].applymap(lambda x: "{:,.0f}".format(x).replace(",", "."))
+    high_values_df = high_values_df.sort_values(by=["Hesap Kodu", "Fiş Tarihi"], ascending=[True, True])
+    high_values_df["Fiş Tarihi"] = pd.to_datetime(high_values_df["Fiş Tarihi"], errors="coerce").dt.strftime("%d-%m-%Y")
+
+
+    # 3) Günlük Bakiyeler & Eksi Bakiyeler
+    daily_balance = df.groupby(["Hesap Kodu", "Fiş Tarihi"]).agg({"Tutar": "sum"}).reset_index()
+    daily_balance["Kümülatif Bakiye"] = daily_balance.groupby("Hesap Kodu")["Tutar"].cumsum()
+    negative_cumulative_balance = daily_balance[daily_balance["Kümülatif Bakiye"] < 0]
+    negative_cumulative_balance["Kümülatif Bakiye"] = negative_cumulative_balance["Kümülatif Bakiye"].apply(lambda x: "{:,.0f}".format(x).replace(",", "."))
+    negative_cumulative_balance = negative_cumulative_balance.sort_values(by=["Hesap Kodu", "Fiş Tarihi"], ascending=[True, True])
+    negative_cumulative_balance["Fiş Tarihi"] = pd.to_datetime(negative_cumulative_balance["Fiş Tarihi"], errors="coerce").dt.strftime("%d-%m-%Y")
+
+    # 4) Açıklama İçinde "Kur Farkı, Kambiyo, Değerleme" Geçenler
+    keywords = ["kur farkı", "kur zararı", "kambiyo", "değerleme"]
+    df["Açıklama"] = df["Açıklama"].astype(str)
+    filtered_rows = df[df["Açıklama"].str.contains("|".join(keywords), case=False, na=False)]
+
+    return templates.TemplateResponse("cash.html", {
+        "request": request,
+        "hesap_listesi": hesap_listesi.to_dict(orient="records"),
+        "high_values": high_values_df.to_dict(orient="records"),
+        "threshold": threshold,
+        "negative_balances": negative_cumulative_balance.to_dict(orient="records"),
+        "filtered_rows": filtered_rows.to_dict(orient="records"),
+        "unique_hesap_sayisi": unique_hesap_kodlari
+    })
